@@ -1,0 +1,46 @@
+[build]
+  # Clone Flutter stable, enable web, build in release mode.
+  # --pwa-strategy=none  → do NOT generate flutter_service_worker.js at all.
+  # This is the build-time equivalent of serviceWorkerVersion:null in index.html.
+  # Both flags together ensure zero service worker involvement.
+  command = "git clone https://github.com/flutter/flutter.git --depth 1 -b stable && flutter/bin/flutter config --enable-web && flutter/bin/flutter build web --release --pwa-strategy=none"
+  publish = "build/web"
+
+[build.environment]
+  FLUTTER_VERSION = "stable"
+
+# ── Cache-Control headers ──────────────────────────────────────────────────
+# index.html and flutter_bootstrap.js: never cache (always fetch fresh).
+# Static assets (JS, wasm, fonts, images): cache 1 year by hash.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma        = "no-cache"
+    Expires       = "0"
+
+[[headers]]
+  for = "/flutter_bootstrap.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*.wasm"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# ── SPA redirect — all routes → index.html ────────────────────────────────
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

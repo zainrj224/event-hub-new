@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "509060751776",
+    "project_id": "event-hub-bed3e",
+    "storage_bucket": "event-hub-bed3e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:509060751776:android:e22419c787697a6ff9c4c5",
+        "android_client_info": {
+          "package_name": "com.bubblish"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "509060751776-mkq1op0ralci5kcoqvhutkm0roo7jtv8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDJAqEKme2-j1Ziw57FH3_AlJ08tm8Eras"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "509060751776-mkq1op0ralci5kcoqvhutkm0roo7jtv8.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
