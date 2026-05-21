@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../../core/theme/app_theme.dart';
-import '../../../../shared/services/follow_service.dart';
 
 class CreateEventScreen extends StatefulWidget {
   const CreateEventScreen({super.key});
@@ -131,22 +130,7 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
       final now = Timestamp.now();
       final imageStr = _resolveImage(now.millisecondsSinceEpoch);
 
-      // Resolve host avatar: prefer base64 from Firestore over Auth photoURL
-      String hostAvatarStr = '';
-      try {
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users').doc(user.uid).get();
-        final b64 = userDoc.data()?['photoBase64'] as String?;
-        if (b64 != null && b64.isNotEmpty) {
-          hostAvatarStr = b64;
-        } else {
-          hostAvatarStr = user.photoURL ?? '';
-        }
-      } catch (_) {
-        hostAvatarStr = user.photoURL ?? '';
-      }
-
-      final docRef = await FirebaseFirestore.instance.collection('events').add({
+      await FirebaseFirestore.instance.collection('events').add({
         'title': _titleCtrl.text.trim(),
         'description': _descCtrl.text.trim(),
         'category': _selectedCategory,
@@ -160,24 +144,13 @@ class _CreateEventScreenState extends State<CreateEventScreen> {
         'isPublic': true,
         'hostId': user.uid,
         'hostName': user.displayName ?? user.email ?? 'Anonymous',
-        'hostAvatar': hostAvatarStr,
+        'hostAvatar': user.photoURL ?? '',
         'tags': <String>[],
         'createdAt': now,
       }).timeout(
         const Duration(seconds: 15),
         onTimeout: () => throw Exception('Request timed out. Check your connection.'),
       );
-
-      // Notify all followers that a new event was posted
-      try {
-        await FollowService.notifyFollowersOfNewEvent(
-          hostId: user.uid,
-          hostName: user.displayName ?? user.email ?? 'Anonymous',
-          hostAvatar: hostAvatarStr,
-          eventTitle: _titleCtrl.text.trim(),
-          eventId: docRef.id,
-        );
-      } catch (_) {}
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

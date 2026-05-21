@@ -83,7 +83,6 @@ class _SearchScreenState extends State<SearchScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
     final surface = isDark ? AppColors.darkSurface : Colors.white;
-    final border = isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB);
     final textPrimary = isDark ? AppColors.darkText : AppColors.lightText;
     final textSecondary =
         isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;

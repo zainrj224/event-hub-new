@@ -5,7 +5,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/theme/theme_notifier.dart';
+import '../../../../core/cache/cache_service.dart';
 
+/// Settings screen — profile photo is picked from gallery (not URL input).
+/// Picked image stored as base64 in Firestore users/{uid}.photoBase64.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -16,11 +19,9 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   final _nameCtrl = TextEditingController();
   bool _savingProfile = false;
-  bool _notificationsEnabled = true;
-  bool _publicProfile = true;
 
-  String? _pickedPhotoDataUrl;
-  String? _currentPhotoUrl;
+  String? _pickedPhotoDataUrl;  // base64 data URL of newly picked image
+  String? _currentPhotoUrl;     // currently saved photo (could be base64 or network url)
 
   @override
   void initState() {
@@ -28,6 +29,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = FirebaseAuth.instance.currentUser;
     _nameCtrl.text = user?.displayName ?? '';
     _currentPhotoUrl = user?.photoURL;
+    // Load base64 photo from Firestore if stored there
     _loadBase64Photo();
   }
 
@@ -37,8 +39,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users').doc(user.uid).get();
-      final b64 = doc.data()?['photoBase64'] as String?;
-      if (b64 != null && mounted) setState(() => _currentPhotoUrl = b64);
+      final base64 = doc.data()?['photoBase64'] as String?;
+      if (base64 != null && mounted) {
+        setState(() => _currentPhotoUrl = base64);
+      }
     } catch (_) {}
   }
 
@@ -89,11 +93,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             .collection('users')
             .doc(user.uid)
             .set({'photoBase64': _pickedPhotoDataUrl}, SetOptions(merge: true));
+        // Mark auth photoURL so app knows a photo exists
         await user.updatePhotoURL('profile_photo_in_firestore');
         finalPhotoUrl = _pickedPhotoDataUrl;
       }
 
       await user.reload();
+
+      final updatedUser = FirebaseAuth.instance.currentUser;
+      if (updatedUser != null) {
+        await CacheService.instance.setProfile(updatedUser.uid, {
+          'displayName': updatedUser.displayName ?? '',
+          'email': updatedUser.email ?? '',
+          'photoURL': finalPhotoUrl ?? '',
+          'uid': updatedUser.uid,
+        });
+      }
 
       setState(() {
         _currentPhotoUrl = finalPhotoUrl;
@@ -123,8 +138,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Delete Account',
             style: TextStyle(fontWeight: FontWeight.w700)),
-        content: const Text(
-            'This will permanently delete your account. Are you sure?'),
+        content: const Text('This will permanently delete your account. Are you sure?'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -133,8 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10))),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Delete'),
           ),
@@ -158,18 +171,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final isDark = ThemeNotifier.instance.isDark;
     final bg = isDark ? AppColors.darkBackground : AppColors.lightBackground;
     final surface = isDark ? AppColors.darkSurface : Colors.white;
-    final border =
-        isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB);
+    final border = isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB);
     final textPrimary = isDark ? AppColors.darkText : AppColors.lightText;
-    final textSecondary =
-        isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
-    final inputFill =
-        isDark ? const Color(0xFF111827) : const Color(0xFFF9FAFB);
+    final textSecondary = isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary;
+    final inputFill = isDark ? const Color(0xFF111827) : const Color(0xFFF9FAFB);
 
-    final displayName =
-        FirebaseAuth.instance.currentUser?.displayName ?? '';
-    final initial =
-        displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
+    final displayName = FirebaseAuth.instance.currentUser?.displayName ?? '';
+    final initial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
     final photoToShow = _pickedPhotoDataUrl ?? _currentPhotoUrl;
 
     return Scaffold(
@@ -178,37 +186,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: surface,
         iconTheme: IconThemeData(color: textPrimary),
         title: Text('Settings',
-            style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-                color: textPrimary)),
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: textPrimary)),
       ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 24, 20, 60),
         children: [
 
-          // ── Edit Profile ─────────────────────────────────────────
+          // ── Edit Profile ────────────────────────────────────────
           _label('EDIT PROFILE', textSecondary),
           const SizedBox(height: 12),
           _card(surface, border,
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-                // Avatar picker
-                Center(
-                  child: Stack(children: [
+              // Avatar picker
+              Center(
+                child: Stack(
+                  children: [
                     GestureDetector(
                       onTap: _pickPhoto,
                       child: Container(
                         width: 90, height: 90,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          border: Border.all(
-                              color: AppColors.purple, width: 2.5),
+                          border: Border.all(color: AppColors.purple, width: 2.5),
                         ),
-                        child: ClipOval(
-                            child: _buildAvatar(photoToShow, initial)),
+                        child: ClipOval(child: _buildAvatar(photoToShow, initial)),
                       ),
                     ),
                     Positioned(
@@ -218,116 +220,84 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Container(
                           width: 28, height: 28,
                           decoration: const BoxDecoration(
-                              color: AppColors.purple,
-                              shape: BoxShape.circle),
+                              color: AppColors.purple, shape: BoxShape.circle),
                           child: const Icon(Icons.camera_alt_rounded,
                               color: Colors.white, size: 16),
                         ),
                       ),
                     ),
-                  ]),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Center(
-                  child: Text(
-                    _pickedPhotoDataUrl != null
-                        ? 'Photo selected — tap Save to apply'
-                        : 'Tap photo to change from gallery',
-                    style:
-                        TextStyle(fontSize: 12, color: textSecondary),
-                  ),
+              ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  _pickedPhotoDataUrl != null
+                      ? 'Photo selected — tap Save to apply'
+                      : 'Tap photo to change from gallery',
+                  style: TextStyle(fontSize: 12, color: textSecondary),
                 ),
-                const SizedBox(height: 16),
+              ),
+              const SizedBox(height: 16),
 
-                _fieldLabel('Display Name', textSecondary),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _nameCtrl,
-                  style: TextStyle(color: textPrimary),
-                  decoration: _inputDeco(
-                      'Your name', inputFill, border, textSecondary),
-                ),
-                const SizedBox(height: 16),
+              _fieldLabel('Display Name', textSecondary),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _nameCtrl,
+                style: TextStyle(color: textPrimary),
+                decoration: _inputDeco('Your name', inputFill, border, textSecondary),
+              ),
+              const SizedBox(height: 16),
 
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding:
-                          const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      backgroundColor: AppColors.purple,
-                      foregroundColor: Colors.white,
-                    ),
-                    onPressed:
-                        _savingProfile ? null : _saveProfile,
-                    child: _savingProfile
-                        ? const SizedBox(
-                            width: 20, height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white))
-                        : const Text('Save Profile',
-                            style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15)),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    backgroundColor: AppColors.purple,
+                    foregroundColor: Colors.white,
                   ),
+                  onPressed: _savingProfile ? null : _saveProfile,
+                  child: _savingProfile
+                      ? const SizedBox(width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Save Profile',
+                          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                 ),
-              ])),
+              ),
+            ]),
+          ),
 
           const SizedBox(height: 28),
 
-          // ── Preferences ──────────────────────────────────────────
+          // ── Preferences ─────────────────────────────────────────
           _label('PREFERENCES', textSecondary),
           const SizedBox(height: 12),
           _card(surface, border,
-              child: Column(children: [
-                _toggle(
-                  icon: Icons.dark_mode_rounded,
-                  title: 'Dark Mode',
-                  subtitle: 'Switch app theme',
-                  value: isDark,
-                  textPrimary: textPrimary,
-                  textSecondary: textSecondary,
-                  onChanged: (v) => ThemeNotifier.instance.setDark(v),
-                ),
-                Divider(
-                    height: 1,
-                    color: border,
-                    indent: 16,
-                    endIndent: 16),
-                _toggle(
-                  icon: Icons.notifications_rounded,
-                  title: 'Push Notifications',
-                  subtitle: 'Get notified about events',
-                  value: _notificationsEnabled,
-                  textPrimary: textPrimary,
-                  textSecondary: textSecondary,
-                  onChanged: (v) =>
-                      setState(() => _notificationsEnabled = v),
-                ),
-              ])),
+            child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              leading: Container(
+                width: 38, height: 38,
+                decoration: BoxDecoration(
+                    color: AppColors.purpleLight, borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.dark_mode_rounded, color: AppColors.purple, size: 20),
+              ),
+              title: Text('Dark Mode',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: textPrimary)),
+              subtitle: Text('Switch app theme',
+                  style: TextStyle(fontSize: 12, color: textSecondary)),
+              trailing: Switch(
+                value: isDark,
+                onChanged: (v) => ThemeNotifier.instance.setDark(v),
+                activeThumbColor: AppColors.purple,
+              ),
+            ),
+          ),
 
           const SizedBox(height: 28),
 
-          // ── Privacy ──────────────────────────────────────────────
-          _label('PRIVACY', textSecondary),
-          const SizedBox(height: 12),
-          _card(surface, border,
-              child: _toggle(
-                icon: Icons.public_rounded,
-                title: 'Public Profile',
-                subtitle: 'Let others discover your profile',
-                value: _publicProfile,
-                textPrimary: textPrimary,
-                textSecondary: textSecondary,
-                onChanged: (v) => setState(() => _publicProfile = v),
-              )),
-
-          const SizedBox(height: 28),
-
-          // ── Danger Zone ──────────────────────────────────────────
+          // ── Danger Zone ─────────────────────────────────────────
           _label('DANGER ZONE', const Color(0xFFEF4444)),
           const SizedBox(height: 12),
           Container(
@@ -345,13 +315,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     color: Color(0xFFEF4444), size: 20),
               ),
               title: const Text('Delete Account',
-                  style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600,
                       color: Color(0xFFB91C1C))),
               subtitle: const Text('Permanently remove your account',
-                  style: TextStyle(
-                      fontSize: 12, color: Color(0xFFEF4444))),
+                  style: TextStyle(fontSize: 12, color: Color(0xFFEF4444))),
               onTap: _confirmDeleteAccount,
             ),
           ),
@@ -360,110 +327,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // ── Avatar ────────────────────────────────────────────────────────────
+  // ── Avatar ─────────────────────────────────────────────────────────────
 
-  Widget _buildAvatar(String? photo, String initial) {
-    if (photo != null && photo.startsWith('data:')) {
+  Widget _buildAvatar(String? photoUrl, String initial) {
+    if (photoUrl == null || photoUrl.isEmpty || photoUrl == 'profile_photo_in_firestore') {
+      return _initialsBox(initial);
+    }
+    if (photoUrl.startsWith('data:')) {
       try {
-        final bytes = base64Decode(photo.split(',').last);
-        return Image.memory(bytes,
-            fit: BoxFit.cover, width: 90, height: 90);
-      } catch (_) {}
+        final bytes = base64Decode(photoUrl.split(',').last);
+        return Image.memory(bytes, fit: BoxFit.cover, width: 90, height: 90);
+      } catch (_) { return _initialsBox(initial); }
     }
-    if (photo != null &&
-        photo.startsWith('http') &&
-        photo != 'profile_photo_in_firestore') {
-      return Image.network(photo,
-          fit: BoxFit.cover, width: 90, height: 90,
-          errorBuilder: (_, __, ___) => _initialsBox(initial));
-    }
-    return _initialsBox(initial);
+    return Image.network(photoUrl, fit: BoxFit.cover, width: 90, height: 90,
+        errorBuilder: (_, __, ___) => _initialsBox(initial));
   }
 
   Widget _initialsBox(String initial) => Container(
-        color: AppColors.purpleLight,
-        child: Center(
-          child: Text(initial,
-              style: const TextStyle(
-                  color: AppColors.purple,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 32)),
-        ),
-      );
+    color: AppColors.purpleLight,
+    child: Center(
+      child: Text(initial,
+          style: const TextStyle(
+              color: AppColors.purple, fontWeight: FontWeight.w700, fontSize: 32)),
+    ),
+  );
 
-  // ── Helpers ───────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────
 
   Widget _label(String t, Color c) => Text(t,
-      style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
-          color: c));
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: c));
 
-  Widget _fieldLabel(String t, Color c) => Text(t,
-      style: TextStyle(
-          fontSize: 13, fontWeight: FontWeight.w600, color: c));
+  Widget _fieldLabel(String t, Color c) =>
+      Text(t, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: c));
 
-  Widget _card(Color surface, Color border, {required Widget child}) =>
-      Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-            color: surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: border)),
-        child: child,
-      );
+  Widget _card(Color surface, Color border, {required Widget child}) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+        color: surface, borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: border)),
+    child: child,
+  );
 
-  InputDecoration _inputDeco(
-          String hint, Color fill, Color border, Color hintC) =>
+  InputDecoration _inputDeco(String hint, Color fill, Color border, Color hintC) =>
       InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(color: hintC),
-        filled: true,
-        fillColor: fill,
+        filled: true, fillColor: fill,
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: border)),
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: border)),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: border)),
+            borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: border)),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(color: AppColors.purple, width: 2)),
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14, vertical: 12),
-      );
-
-  Widget _toggle({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required bool value,
-    required Color textPrimary,
-    required Color textSecondary,
-    required ValueChanged<bool> onChanged,
-  }) =>
-      ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: Container(
-          width: 38, height: 38,
-          decoration: BoxDecoration(
-              color: AppColors.purpleLight,
-              borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: AppColors.purple, size: 20),
-        ),
-        title: Text(title,
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: textPrimary)),
-        subtitle: Text(subtitle,
-            style: TextStyle(fontSize: 12, color: textSecondary)),
-        trailing: Switch(
-            value: value,
-            onChanged: onChanged,
-            activeColor: AppColors.purple),
+            borderSide: const BorderSide(color: AppColors.purple, width: 2)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       );
 }

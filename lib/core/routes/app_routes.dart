@@ -16,7 +16,6 @@ class AppRoutes {
   static const String signUp       = '/signup';
   static const String main         = '/main';
   static const String eventDetail  = '/event-detail';
-  static const String createEvent  = '/create-event';
   static const String myEvents     = '/my-events';
   static const String savedEvents  = '/saved-events';
   static const String settings     = '/settings';

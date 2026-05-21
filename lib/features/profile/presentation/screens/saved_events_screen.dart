@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/routes/app_routes.dart';
-import '../../../events/domain/entities/event_entity.dart';
 import '../../../events/data/models/event_model.dart';
 
 class SavedEventsScreen extends StatefulWidget {

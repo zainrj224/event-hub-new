@@ -57,7 +57,7 @@ class _ExploreTabState extends State<ExploreTab> {
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   Text('Explore',
                       style: TextStyle(
                           fontSize: 26, fontWeight: FontWeight.w800)),

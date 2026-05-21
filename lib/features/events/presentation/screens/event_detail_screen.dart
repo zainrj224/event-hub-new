@@ -5,7 +5,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/entities/event_entity.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/utils/date_formatter.dart';
-import '../../../../shared/services/follow_service.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final Event event;
@@ -164,8 +163,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         Navigator.of(context).pop();
       }
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed to delete: $e'), behavior: SnackBarBehavior.floating));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to delete: $e'), behavior: SnackBarBehavior.floating));
+      }
     }
   }
 
@@ -489,9 +490,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     final avatarBg = isDark ? const Color(0xFF374151) : const Color(0xFFE5E7EB);
     final hasAvatar = event.hostAvatar.isNotEmpty;
     final hostInitial = event.hostName.isNotEmpty ? event.hostName[0].toUpperCase() : '?';
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
-    final isOwnProfile = currentUserId == event.hostId;
 
+    // Use CachedNetworkImage with explicit errorWidget so the initial
+    // letter always shows when the image URL is empty or fails to load.
     final Widget avatarWidget = hasAvatar
         ? CachedNetworkImage(
             imageUrl: event.hostAvatar,
@@ -520,14 +521,6 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
             Text('Event Organizer', style: TextStyle(fontSize: 12,
                 color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary)),
           ])),
-          // Follow button — hidden if viewing own event
-          if (!isOwnProfile && currentUserId != null)
-            _FollowButton(
-              targetUserId: event.hostId,
-              targetName: event.hostName,
-              targetAvatar: event.hostAvatar,
-              isDark: isDark,
-            ),
         ]),
       ]),
     );
@@ -665,79 +658,4 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     decoration: BoxDecoration(color: AppColors.purpleLight, borderRadius: BorderRadius.circular(12)),
     child: Icon(icon, color: AppColors.purple, size: 20),
   );
-}
-
-// ── Follow Button ──────────────────────────────────────────────────────────
-
-class _FollowButton extends StatefulWidget {
-  final String targetUserId;
-  final String targetName;
-  final String targetAvatar;
-  final bool isDark;
-  const _FollowButton({
-    required this.targetUserId,
-    required this.targetName,
-    required this.targetAvatar,
-    required this.isDark,
-  });
-  @override
-  State<_FollowButton> createState() => _FollowButtonState();
-}
-
-class _FollowButtonState extends State<_FollowButton> {
-  bool _loading = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<bool>(
-      stream: FollowService.instance.isFollowingStream(widget.targetUserId),
-      builder: (context, snap) {
-        final isFollowing = snap.data ?? false;
-        return GestureDetector(
-          onTap: _loading ? null : () => _toggle(isFollowing),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: isFollowing ? Colors.transparent : AppColors.purple,
-              border: Border.all(
-                color: isFollowing ? const Color(0xFFD1D5DB) : AppColors.purple,
-              ),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: _loading
-                ? const SizedBox(width: 14, height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.purple))
-                : Text(
-                    isFollowing ? 'Following' : 'Follow',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: isFollowing
-                          ? (widget.isDark ? AppColors.darkText : const Color(0xFF374151))
-                          : Colors.white,
-                    ),
-                  ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _toggle(bool isFollowing) async {
-    setState(() => _loading = true);
-    try {
-      if (isFollowing) {
-        await FollowService.instance.unfollow(widget.targetUserId);
-      } else {
-        await FollowService.instance.follow(
-          widget.targetUserId,
-          targetName: widget.targetName,
-          targetAvatar: widget.targetAvatar,
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
 }

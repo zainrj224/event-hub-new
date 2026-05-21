@@ -228,17 +228,7 @@ class EventCard extends StatelessWidget {
           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
               color: Color(0xFF9333EA))),
     );
-    if (event.hostAvatar.isEmpty || event.hostAvatar == 'profile_photo_in_firestore') {
-      return fallback;
-    }
-    // Base64 image uploaded from gallery
-    if (event.hostAvatar.startsWith('data:')) {
-      try {
-        final bytes = base64Decode(event.hostAvatar.split(',').last);
-        return CircleAvatar(radius: 14, backgroundImage: MemoryImage(bytes), backgroundColor: bg);
-      } catch (_) { return fallback; }
-    }
-    // Regular network URL
+    if (event.hostAvatar.isEmpty) return fallback;
     return CachedNetworkImage(
       imageUrl: event.hostAvatar,
       imageBuilder: (_, imageProvider) => CircleAvatar(

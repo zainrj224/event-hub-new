@@ -7,13 +7,20 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/theme_notifier.dart';
 import 'core/routes/app_routes.dart';
 import 'features/auth/presentation/screens/sign_in_screen.dart';
+import 'core/cache/cache_service.dart';
 import 'main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  GoogleFonts.config.allowRuntimeFetching = false;
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // Init cache — wrapped so a missing package never blanks the app
+  try {
+    await CacheService.instance.init();
+  } catch (_) {}
+
   runApp(const EventHubApp());
 }
 
@@ -43,6 +50,17 @@ class EventHubApp extends StatelessWidget {
   }
 }
 
+/// AuthGate as StatefulWidget — critical fix.
+///
+/// As StatelessWidget, build() is called many times. Each call passes a
+/// potentially new authStateChanges() Stream object to StreamBuilder.
+/// StreamBuilder compares streams by identity: a new object means it cancels
+/// the old subscription and creates a new one, briefly emitting
+/// ConnectionState.waiting. During Flutter Web route transitions, build() fires
+/// rapidly → multiple subscriptions pile up → CanvasKit is overwhelmed → freeze.
+///
+/// As StatefulWidget, the stream is created ONCE in initState() and reused,
+/// so StreamBuilder never resubscribes unnecessarily.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -51,7 +69,7 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  // Single stable stream — never recreated on rebuild
+  // Single stream instance — never recreated during rebuilds
   final Stream<User?> _authStream = FirebaseAuth.instance.authStateChanges();
 
   @override
@@ -61,20 +79,7 @@ class _AuthGateState extends State<AuthGate> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            backgroundColor: Color(0xFFF9FAFB),
-            body: Center(
-              child: CircularProgressIndicator(
-                color: AppColors.purple,
-              ),
-            ),
-          );
-        }
-        if (snapshot.hasError) {
-          return Scaffold(
-            body: Center(
-              child: Text('Error: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red)),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
         if (snapshot.hasData && snapshot.data != null) {
